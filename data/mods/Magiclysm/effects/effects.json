@@ -1213,7 +1213,7 @@
               "or": [ { "npc_has_flag": "MAGIC_USER" }, { "and": [ "npc_is_character", { "math": [ "n_spell_count() >= 6" ] } ] } ]
             },
             "distance": { "math": [ "( u_spell_level('animist_detect_wizards') * 2) + 3" ] },
-            "descriptions": [ { "id": "fae_sense", "symbol": "?", "color": "cyan", "text": "You see the ley lines of a wielder of magic." } ]
+            "descriptions": [ { "id": "wizard_sense", "symbol": "?", "color": "cyan", "text": "You see the ley lines of a wielder of magic." } ]
           }
         ]
       }
@@ -1930,6 +1930,24 @@
           { "type": "stab", "add": -30 },
           { "type": "bullet", "add": -30 }
         ]
+      }
+    ]
+  },
+  {
+    "type": "effect_type",
+    "id": "effect_manatouched_mana_flash_active",
+    "//": "Duration tracker, empty to hide effect",
+    "name": [ "" ],
+    "desc": [ "" ]
+  },
+  {
+    "type": "effect_type",
+    "id": "effect_manatouched_external_mana_luminance",
+    "name": [ "Eldritch Glow" ],
+    "desc": [ "The air around you shimmers in a multitude of colors." ],
+    "enchantments": [
+      {
+        "values": [ { "value": "LUMINATION", "add": { "math": [ "min( (u_sum_traits_of_category_char_has('MANATOUCHED') * 3), 50)" ] } } ]
       }
     ]
   },

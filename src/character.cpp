@@ -34,6 +34,7 @@
 #include "construction.h"
 #include "coordinates.h"
 #include "creature_tracker.h"
+#include "current_map.h"
 #include "cursesdef.h"
 #include "debug.h"
 #include "dialogue.h"
@@ -105,7 +106,6 @@
 #include "rng.h"
 #include "scent_map.h"
 #include "skill.h"
-#include "skill_boost.h"
 #include "sounds.h"
 #include "stomach.h"
 #include "string_formatter.h"
@@ -2592,19 +2592,9 @@ void Character::process_turn()
 
 void Character::recalc_hp()
 {
-    int str_boost_val = 0;
-    std::optional<skill_boost> str_boost = skill_boost::get( "str" );
-    if( str_boost ) {
-        float skill_total = 0;
-        for( const std::string &skill_str : str_boost->skills() ) {
-            skill_total += get_skill_level( skill_id( skill_str ) );
-        }
-        str_boost_val = str_boost->calc_bonus( skill_total );
-    }
     // Mutated toughness stacks with starting, by design.
     float hp_mod = 1.0f + enchantment_cache->get_value_multiply( enchant_vals::mod::MAX_HP );
-    float hp_adjustment = ( str_boost_val * 3 ) +
-                          enchantment_cache->get_value_add( enchant_vals::mod::MAX_HP );
+    float hp_adjustment = enchantment_cache->get_value_add( enchant_vals::mod::MAX_HP );
     calc_all_parts_hp( hp_mod, hp_adjustment, get_str_base(), get_dex_base(), get_per_base(),
                        get_int_base(), get_lifestyle(), get_fat_to_hp() );
     cached_dead_state.reset();
@@ -3760,20 +3750,6 @@ void Character::prevent_death()
     cached_dead_state.reset();
 }
 
-void Character::apply_skill_boost()
-{
-    for( const skill_boost &boost : skill_boost::get_all() ) {
-        float skill_total = 0;
-        for( const std::string &skill_str : boost.skills() ) {
-            skill_total += get_skill_level( skill_id( skill_str ) );
-        }
-        mod_stat( boost.stat(), boost.calc_bonus( skill_total ) );
-        if( boost.stat() == "str" ) {
-            recalc_hp();
-        }
-    }
-}
-
 std::pair<bodypart_id, int> Character::best_part_to_smash() const
 {
     std::pair<bodypart_id, int> best_part_to_smash = {bodypart_str_id::NULL_ID().id(), 0};
@@ -3965,8 +3941,6 @@ void Character::reset_stats()
     else if( str_max <= 5 ) {
         mod_dodge_bonus( 1 );   // Bonus if we're small
     }
-
-    apply_skill_boost();
 
     nv_cached = false;
 
@@ -6070,7 +6044,8 @@ bool Character::sees_with_specials( const Creature &critter ) const
     return false;
 }
 
-bool Character::pour_into( item_location &container, item &liquid, bool ignore_settings )
+bool Character::pour_into( item_location &container, item &liquid, bool ignore_settings,
+                           bool silent )
 {
     std::string err;
     int max_remaining_capacity = container->get_remaining_capacity_for_liquid( liquid, *this, &err );
@@ -6101,12 +6076,14 @@ bool Character::pour_into( item_location &container, item &liquid, bool ignore_s
         amount = std::min( amount, liquid.charges );
     }
 
-    add_msg_if_player( _( "You pour %1$s into the %2$s." ), liquid.tname(), container->tname() );
+    if( !silent ) {
+        add_msg_if_player( _( "You pour %1$s into the %2$s." ), liquid.tname(), container->tname() );
+    }
 
     liquid.charges -= container->fill_with( liquid, amount, false, false, ignore_settings );
     inv->unsort();
 
-    if( liquid.charges > 0 ) {
+    if( liquid.charges > 0 && !silent ) {
         add_msg_if_player( _( "There's some left over!" ) );
     }
 
@@ -6382,7 +6359,8 @@ bool Character::has_calorie_deficit() const
 
 units::mass Character::bodyweight() const
 {
-    return bodyweight_fat() + bodyweight_lean();
+    return std::max( 1_gram, enchantment_cache->modify_value( enchant_vals::mod::WEIGHT,
+                     bodyweight_fat() + bodyweight_lean() ) );
 }
 
 units::mass Character::bodyweight_fat() const
@@ -6583,7 +6561,7 @@ void Character::mend_item( item_location &&obj, bool interactive )
         menu.text = _( "Toggle which fault?" );
         std::vector<std::pair<fault_id, bool>> opts;
         for( const auto &f : obj->faults_potential() ) {
-            opts.emplace_back( f, !!obj->faults.count( f ) );
+            opts.emplace_back( f, obj->has_fault( f ) );
             menu.addentry( -1, true, -1, string_format(
                                opts.back().second ? pgettext( "fault", "Mend: %s" ) : pgettext( "fault", "Set: %s" ),
                                f.obj().name() ) );
@@ -6595,9 +6573,9 @@ void Character::mend_item( item_location &&obj, bool interactive )
         menu.query();
         if( menu.ret >= 0 ) {
             if( opts[menu.ret].second ) {
-                obj->faults.erase( opts[menu.ret].first );
+                obj->remove_fault( opts[menu.ret].first );
             } else {
-                obj->set_fault( opts[menu.ret].first );
+                obj->set_fault( opts[menu.ret].first, true, false );
             }
         }
         return;
@@ -6666,7 +6644,7 @@ void Character::mend_item( item_location &&obj, bool interactive )
             auto tools = reqs.get_folded_tools_list( fold_width, col, inv );
             auto comps = reqs.get_folded_components_list( fold_width, col, inv, is_crafting_component );
 
-            std::string descr = word_rewrap( opt.fault->description(), 80 ) + "\n\n";
+            std::string descr = word_rewrap( obj.get_item()->get_fault_description( opt.fault ), 80 ) + "\n\n";
             for( const fault_id &fid : fix.faults_removed ) {
                 if( obj->has_fault( fid ) ) {
                     descr += string_format( _( "Removes fault: <color_green>%s</color>\n" ), fid->name() );
@@ -6677,10 +6655,12 @@ void Character::mend_item( item_location &&obj, bool interactive )
             for( const fault_id &fid : fix.faults_added ) {
                 descr += string_format( _( "Adds fault: <color_yellow>%s</color>\n" ), fid->name() );
             }
-            if( fix.mod_damage > 0 ) {
-                descr += string_format( _( "<color_green>Repairs</color> %d damage.\n" ), fix.mod_damage );
-            } else if( fix.mod_damage < 0 ) {
-                descr += string_format( _( "<color_red>Applies</color> %d damage.\n" ), -fix.mod_damage );
+            if( fix.mod_damage < 0 ) {
+                descr += string_format( _( "<color_green>Repairs</color> %d damage.\n" ),
+                                        -fix.mod_damage / itype::damage_scale );
+            } else if( fix.mod_damage > 0 ) {
+                descr += string_format( _( "<color_red>Applies</color> %d damage.\n" ),
+                                        fix.mod_damage / itype::damage_scale );
             }
 
             opt.time_to_fix = fix.time;
@@ -7533,9 +7513,10 @@ void Character::signal_nemesis()
 
 void Character::vomit()
 {
+    const units::volume stomach_contents_before_vomit = stomach.contains();
     get_event_bus().send<event_type::throws_up>( getID() );
 
-    if( stomach.contains() != 0_ml ) {
+    if( stomach_contents_before_vomit != 0_ml ) {
         get_map().add_field( adjacent_tile(), fd_bile, 1 );
         add_msg_player_or_npc( m_bad, _( "You throw up heavily!" ), _( "<npcname> throws up heavily!" ) );
     }
@@ -7567,7 +7548,7 @@ void Character::vomit()
     remove_effect( effect_pkill2 );
     remove_effect( effect_pkill3 );
     // Don't wake up when just retching
-    if( stomach.contains() > 0_ml ) {
+    if( stomach_contents_before_vomit > 0_ml ) {
         wake_up();
     }
 }
@@ -10579,7 +10560,7 @@ void Character::place_corpse( map *here )
             cbm.set_flag( flag_FILTHY );
             cbm.set_flag( flag_NO_STERILE );
             cbm.set_flag( flag_NO_PACKED );
-            cbm.faults.emplace( fault_bionic_salvaged );
+            cbm.set_fault( fault_bionic_salvaged );
             body.put_in( cbm, pocket_type::CORPSE );
         }
     }
@@ -10591,6 +10572,8 @@ void Character::place_corpse( const tripoint_abs_omt &om_target )
 {
     tinymap bay;
     bay.load( om_target, false );
+    // Redundant as long as map operations aren't using get_map() in a transitive call chain. Added for future proofing.
+    swap_map swap( *bay.cast_to_map() );
     point_omt_ms fin( rng( 1, SEEX * 2 - 2 ), rng( 1, SEEX * 2 - 2 ) );
     // This makes no sense at all. It may find a random tile without furniture, but
     // if the first try to find one fails, it will go through all tiles of the map
@@ -11596,8 +11579,9 @@ bool Character::has_destination() const
 
 bool Character::has_destination_activity() const
 {
-    return !get_destination_activity().is_null() && destination_point &&
-           pos_bub() == get_map().get_bub( *destination_point );
+    const bool has_reached_destination = destination_point &&
+                                         ( pos_abs() == *destination_point || auto_move_route.empty() );
+    return !get_destination_activity().is_null() && has_reached_destination;
 }
 
 void Character::start_destination_activity()
@@ -12299,7 +12283,7 @@ read_condition_result Character::check_read_condition( const item &book ) const
             !has_flag( STATIC( json_character_flag( "ENHANCED_VISION" ) ) ) ) {
             result |= read_condition_result::NEED_GLASSES;
         }
-        if( fine_detail_vision_mod() > 4 ) {
+        if( fine_detail_vision_mod() > 4 && !book.has_flag( flag_CAN_USE_IN_DARK ) ) {
             result |= read_condition_result::TOO_DARK;
         }
         if( is_blind() ) {
@@ -12357,7 +12341,7 @@ const Character *Character::get_book_reader( const item &book,
         reasons.emplace_back( is_avatar() ? _( "Your eyes won't focus without reading glasses." ) :
                               string_format( _( "%s's eyes won't focus without reading glasses." ), disp_name() ) );
     } else if( condition & read_condition_result::TOO_DARK &&
-               !has_flag( json_flag_READ_IN_DARKNESS ) ) {
+               !has_flag( json_flag_READ_IN_DARKNESS ) && !book.has_flag( flag_CAN_USE_IN_DARK ) ) {
         // Too dark to read only applies if the player can read to himself
         reasons.emplace_back( _( "It's too dark to read!" ) );
         return nullptr;
@@ -13692,11 +13676,6 @@ bool Character::can_lift( vehicle &veh, map &here ) const
     }
     const int npc_str = get_lift_assist();
     return str + npc_str >= veh.lift_strength( here );
-}
-
-static std::string wrap60( const std::string &text )
-{
-    return string_join( foldstring( text, 60 ), "\n" );
 }
 
 bool character_martial_arts::pick_style( const Character &you ) // Style selection menu

@@ -46,6 +46,7 @@
 #include "coordinates.h"
 #include "creature.h"
 #include "creature_tracker.h"
+#include "current_map.h"
 #include "cursesdef.h"
 #include "debug.h"
 #include "dialogue.h"
@@ -72,6 +73,7 @@
 #include "item_location.h"
 #include "itype.h"
 #include "json.h"
+#include "list.h"
 #include "localized_comparator.h"
 #include "magic.h"
 #include "map.h"
@@ -296,23 +298,31 @@ namespace
 {
 struct fake_tripoint { // NOLINT(cata-xy)
     int x = 0, y = 0, z = 0;
+
+    static const fake_tripoint invalid;
 };
 
 struct OM_point { // NOLINT(cata-xy)
     int x = 0, y = 0;
+
+    static const OM_point invalid;
 };
+
+const fake_tripoint fake_tripoint::invalid{ tripoint::invalid.x, tripoint::invalid.y, tripoint::invalid.z };
+const OM_point OM_point::invalid{ point::invalid.x, point::invalid.y };
 
 std::istream &operator>>( std::istream &is, fake_tripoint &pos )
 {
     char c = 0;
-    is >> pos.x &&is.get( c ) &&c == '.' &&is >> pos.y &&is.get( c ) &&c == '.' &&is >> pos.z;
+    static_cast<void>( is >> pos.x && is.get( c ) && c == '.' && is >> pos.y && is.get( c ) &&
+                       c == '.' && is >> pos.z );
     return is;
 }
 
 std::istream &operator>>( std::istream &is, OM_point &pos )
 {
     char c = 0;
-    is >> pos.x &&is.get( c ) &&c == '.' &&is >> pos.y;
+    static_cast<void>( is >> pos.x && is.get( c ) && c == '.' && is >> pos.y );
     return is;
 }
 
@@ -323,8 +333,9 @@ T _from_fs_string( std::string const &s )
     is.imbue( std::locale::classic() );
     T result;
     is >> result;
-    if( !is ) {
-        return T{};
+    if( !is || !is.eof() ) {
+        debugmsg( "Invalid map/OM coordinate %s", s );
+        return T::invalid;
     }
     return result;
 }
@@ -375,11 +386,18 @@ bool _trim_mapbuffer( std::filesystem::path const &dep, rdi_t &iter,
         return false;
     }
     // discard map buffer outside of current and adjacent segments
-    if( dep.parent_path().filename() == std::filesystem::u8path( "maps" ) &&
-        !segs.is_point_inside(
-            tripoint{ _from_map_string( dep.filename().string() ).xy(), 0 } ) ) {
-        iter.disable_recursion_pending();
-        return false;
+    if( dep.parent_path().filename() == std::filesystem::u8path( "maps" ) ) {
+        std::filesystem::path map_folder = dep.filename();
+        std::string map_coords;
+        if( map_folder.extension().string() == ".zzip" ) {
+            map_coords = map_folder.stem().string();
+        } else {
+            map_coords = map_folder.filename().string();
+        }
+        if( !segs.is_point_inside( tripoint{ _from_map_string( map_coords ).xy(), 0 } ) ) {
+            iter.disable_recursion_pending();
+            return false;
+        }
     }
     return true;
 }
@@ -573,9 +591,10 @@ static void monster_ammo_edit( monster &mon )
     itype_id new_ammo;
     new_ammo = ammos[smenu.ret];
     if( new_ammo.is_valid() ) {
-        int value;
+        int value = 0;
         const itype *display_type = item::find_type( new_ammo );
-        if( query_int( value, _( "Set %s to how much ammo?  Currently: %d" ), display_type->nname( 1 ),
+        if( query_int( value, false, _( "Set %s to how much ammo?  Currently: %d" ),
+                       display_type->nname( 1 ),
                        mon.ammo[new_ammo] ) )  {
             if( value < 0 ) {
                 value = 0;
@@ -785,21 +804,21 @@ static void monster_edit_menu()
     switch( nmenu.ret ) {
         case D_HP: {
             int value = 0;
-            if( query_int( value,  _( "Set the hitpoints to?  Currently: %d" ), critter->get_hp() ) ) {
+            if( query_int( value, false, _( "Set the hitpoints to?  Currently: %d" ), critter->get_hp() ) ) {
                 critter->set_hp( value );
             }
         }
         break;
         case D_MORALE: {
             int value = 0;
-            if( query_int( value, _( "Set the morale to?  Currently: %d" ), critter->morale ) ) {
+            if( query_int( value, false, _( "Set the morale to?  Currently: %d" ), critter->morale ) ) {
                 critter->morale = value;
             }
         }
         break;
         case D_AGGRO: {
             int value = 0;
-            if( query_int( value, _( "Set aggression to?  Currently: %d" ), critter->anger ) ) {
+            if( query_int( value, false, _( "Set aggression to?  Currently: %d" ), critter->anger ) ) {
                 critter->anger = value;
             }
         }
@@ -830,7 +849,7 @@ static void monster_edit_menu()
         }
         case D_WANDER: {
             int value = 0;
-            if( query_int( value, _( "Set wander desire to?  Currently: %d" ), critter->wandf ) ) {
+            if( query_int( value, false, _( "Set wander desire to?  Currently: %d" ), critter->wandf ) ) {
                 critter->wandf = value;
             }
             break;
@@ -1640,7 +1659,7 @@ static void change_spells( Character &character )
 
         } else if( action == "CONFIRM" ) {
             int &spell_level = std::get<1>( *spells_relative[spell_selected] );
-            query_int( spell_level, _( "Set spell level to?  Currently: %1$d" ), spell_level );
+            query_int( spell_level, false, _( "Set spell level to?  Currently: %1$d" ), spell_level );
             spell_level = clamp( spell_level, -1,
                                  static_cast<int>( std::get<0>( *spells_relative[spell_selected] ).max_level.evaluate( d ) ) );
             set_spell( std::get<0>( *spells_relative[spell_selected] ), spell_level );
@@ -1707,14 +1726,14 @@ static void spawn_artifact()
         ++menu_ind;
     }
     relic_menu.query();
-    int artifact_max_attributes;
-    int artifact_power_level;
+    int artifact_max_attributes = 0;
+    int artifact_power_level = 0;
     bool artifact_is_resonant = false;
-    int artifact_max_negative_value;
+    int artifact_max_negative_value = 0;
     if( relic_menu.ret >= 0 && relic_menu.ret < static_cast<int>( relic_list.size() ) ) {
-        if( query_int( artifact_max_attributes, _( "Enter max attributes:" ) )
-            && query_int( artifact_power_level, _( "Enter power level:" ) )
-            && query_int( artifact_max_negative_value, _( "Enter negative power limit:" ) ) ) {
+        if( query_int( artifact_max_attributes, false, _( "Enter max attributes:" ) )
+            && query_int( artifact_power_level, false, _( "Enter power level:" ) )
+            && query_int( artifact_max_negative_value, false, _( "Enter negative power limit:" ) ) ) {
             if( const std::optional<tripoint_bub_ms> center = g->look_around() ) {
                 if( query_yn( _( "Is the artifact resonant?" ) ) ) {
                     artifact_is_resonant = true;
@@ -1899,8 +1918,8 @@ static void character_edit_stats_menu( Character &you )
     }
 
     if( bp_ptr != nullptr ) {
-        int value;
-        if( query_int( value, _( "Set the stat to?  Currently: %d" ), *bp_ptr ) && value >= 0 ) {
+        int value = 0;
+        if( query_int( value, false, _( "Set the stat to?  Currently: %d" ), *bp_ptr ) && value >= 0 ) {
             *bp_ptr = value;
             you.reset_stats();
         }
@@ -1964,43 +1983,44 @@ static void character_edit_needs_menu( Character &you )
     int value;
     switch( smenu.ret ) {
         case 0:
-            if( query_int( value, _( "Set hunger to?  Currently: %d" ), you.get_hunger() ) ) {
+            if( query_int( value, false, _( "Set hunger to?  Currently: %d" ), you.get_hunger() ) ) {
                 you.set_hunger( value );
             }
             break;
 
         case 1:
-            if( query_int( value, _( "Set stored kcal to?  Currently: %d" ), you.get_stored_kcal() ) ) {
+            if( query_int( value, false, _( "Set stored kcal to?  Currently: %d" ), you.get_stored_kcal() ) ) {
                 you.set_stored_kcal( value );
             }
             break;
 
         case 2:
-            if( query_int( value, _( "Set stomach kcal to?  Currently: %d" ), you.stomach.get_calories() ) ) {
+            if( query_int( value, false, _( "Set stomach kcal to?  Currently: %d" ),
+                           you.stomach.get_calories() ) ) {
                 you.stomach.mod_calories( value - you.stomach.get_calories() );
             }
             break;
 
         case 3:
-            if( query_int( value, _( "Set gut kcal to?  Currently: %d" ), you.guts.get_calories() ) ) {
+            if( query_int( value, false, _( "Set gut kcal to?  Currently: %d" ), you.guts.get_calories() ) ) {
                 you.guts.mod_calories( value - you.guts.get_calories() );
             }
             break;
 
         case 4:
-            if( query_int( value, _( "Set thirst to?  Currently: %d" ), you.get_thirst() ) ) {
+            if( query_int( value, false, _( "Set thirst to?  Currently: %d" ), you.get_thirst() ) ) {
                 you.set_thirst( value );
             }
             break;
 
         case 5:
-            if( query_int( value, _( "Set sleepiness to?  Currently: %d" ), you.get_sleepiness() ) ) {
+            if( query_int( value, false, _( "Set sleepiness to?  Currently: %d" ), you.get_sleepiness() ) ) {
                 you.set_sleepiness( value );
             }
             break;
 
         case 6:
-            if( query_int( value, _( "Set sleep deprivation to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set sleep deprivation to?  Currently: %d" ),
                            you.get_sleep_deprivation() ) ) {
                 you.set_sleep_deprivation( value );
             }
@@ -2013,7 +2033,7 @@ static void character_edit_needs_menu( Character &you )
             }
             break;
         case 10:
-            if( query_int( value, _( "Set weariness tracker to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set weariness tracker to?  Currently: %d" ),
                            you.activity_history.debug_get_tracker() ) ) {
                 you.activity_history.debug_set_tracker( value );
             }
@@ -2034,7 +2054,7 @@ static void character_edit_needs_menu( Character &you )
         default:
             if( smenu.ret >= 10 && smenu.ret < static_cast<int>( vits.size() + 10 ) ) {
                 auto iter = std::next( vits.begin(), smenu.ret - 10 );
-                if( query_int( value, _( "Set %s to?  Currently: %d" ),
+                if( query_int( value, false, _( "Set %s to?  Currently: %d" ),
                                iter->second.name(), you.vitamin_get( iter->first ) ) ) {
                     you.vitamin_set( iter->first, value );
                 }
@@ -2069,7 +2089,7 @@ static void character_edit_hp_menu( Character &you )
 
     if( bp.is_valid() && bp != bodypart_str_id::NULL_ID() ) {
         int value;
-        if( query_int( value, _( "Set the hitpoints to?  Currently: %d" ),
+        if( query_int( value, false, _( "Set the hitpoints to?  Currently: %d" ),
                        you.get_part_hp_cur( bp.id() ) ) &&
             value >= 0 )  {
             you.set_part_hp_cur( bp.id(), value );
@@ -2077,7 +2097,7 @@ static void character_edit_hp_menu( Character &you )
         }
     } else if( all_select ) {
         int value;
-        if( query_int( value, _( "Set the hitpoints to?  Currently: %d" ), you.get_lowest_hp() ) &&
+        if( query_int( value, false, _( "Set the hitpoints to?  Currently: %d" ), you.get_lowest_hp() ) &&
             value >= 0 ) {
             for( bodypart_id part_id : you.get_all_body_parts( get_body_part_flags::only_main ) ) {
                 you.set_part_hp_cur( part_id, value );
@@ -2101,35 +2121,35 @@ static void character_edit_opinion_menu( npc *np )
     int value;
     switch( smenu.ret ) {
         case 0:
-            if( query_int( value, _( "Set trust to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set trust to?  Currently: %d" ),
                            np->op_of_u.trust ) ) {
                 np->op_of_u.trust = value;
             }
             break;
         case 1:
-            if( query_int( value, _( "Set fear to?  Currently: %d" ), np->op_of_u.fear ) ) {
+            if( query_int( value, false, _( "Set fear to?  Currently: %d" ), np->op_of_u.fear ) ) {
                 np->op_of_u.fear = value;
             }
             break;
         case 2:
-            if( query_int( value, _( "Set value to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set value to?  Currently: %d" ),
                            np->op_of_u.value ) ) {
                 np->op_of_u.value = value;
             }
             break;
         case 3:
-            if( query_int( value, _( "Set anger to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set anger to?  Currently: %d" ),
                            np->op_of_u.anger ) ) {
                 np->op_of_u.anger = value;
             }
             break;
         case 4:
-            if( query_int( value, _( "Set owed to?  Currently: %d" ), np->op_of_u.owed ) ) {
+            if( query_int( value, false, _( "Set owed to?  Currently: %d" ), np->op_of_u.owed ) ) {
                 np->op_of_u.owed = value;
             }
             break;
         case 5:
-            if( query_int( value, _( "Set sold to?  Currently: %d" ), np->op_of_u.sold ) ) {
+            if( query_int( value, false, _( "Set sold to?  Currently: %d" ), np->op_of_u.sold ) ) {
                 np->op_of_u.sold = value;
             }
             break;
@@ -2148,24 +2168,24 @@ static void character_edit_personality_menu( npc *np )
     int value;
     switch( smenu.ret ) {
         case 0:
-            if( query_int( value, _( "Set aggression to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set aggression to?  Currently: %d" ),
                            np->personality.aggression ) ) {
                 np->personality.aggression = value;
             }
             break;
         case 1:
-            if( query_int( value, _( "Set bravery to?  Currently: %d" ), np->personality.bravery ) ) {
+            if( query_int( value, false, _( "Set bravery to?  Currently: %d" ), np->personality.bravery ) ) {
                 np->personality.bravery = value;
             }
             break;
         case 2:
-            if( query_int( value, _( "Set collector to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set collector to?  Currently: %d" ),
                            np->personality.collector ) ) {
                 np->personality.collector = value;
             }
             break;
         case 3:
-            if( query_int( value, _( "Set altruism to?  Currently: %d" ),
+            if( query_int( value, false, _( "Set altruism to?  Currently: %d" ),
                            np->personality.altruism ) ) {
                 np->personality.altruism = value;
             }
@@ -2213,25 +2233,16 @@ static void character_edit_desc_menu( Character &you )
         }
         break;
         case 2: {
-            string_input_popup popup;
-            popup.title( _( "Enter age in years.  Minimum 16, maximum 55" ) )
-            .text( string_format( "%d", you.base_age() ) )
-            .only_digits( true );
-            const int result = popup.query_int();
-            if( result != 0 ) {
+            int result = you.base_age();
+            if( query_int( result, true, _( "Enter age in years.  Minimum 16, maximum 55" ) ) && result > 0 ) {
                 you.set_base_age( clamp( result, 16, 55 ) );
             }
         }
         break;
         case 3: {
-            string_input_popup popup;
-            popup.title( string_format( _( "Enter height in centimeters.  Minimum %d, maximum %d" ),
-                                        Character::min_height(),
-                                        Character::max_height() ) )
-            .text( string_format( "%d", you.base_height() ) )
-            .only_digits( true );
-            const int result = popup.query_int();
-            if( result != 0 ) {
+            int result = you.base_height();
+            if( query_int( result, true, _( "Enter height in centimeters.  Minimum %d, maximum %d" ),
+                           Character::min_height(), Character::max_height() ) && result > 0 ) {
                 you.set_base_height( clamp( result, Character::min_height(), Character::max_height() ) );
             }
         }
@@ -2461,7 +2472,7 @@ static void character_edit_menu()
         break;
         case D_RADS: {
             int value;
-            if( query_int( value, _( "Set rads to?  Currently: %d" ), you.get_rad() ) ) {
+            if( query_int( value, false, _( "Set rads to?  Currently: %d" ), you.get_rad() ) ) {
                 you.set_rad( value );
             }
         }
@@ -2471,7 +2482,7 @@ static void character_edit_menu()
             break;
         case D_STAMINA:
             int value;
-            if( query_int( value, _( "Set stamina to?  Current: %d. Max: %d." ), you.get_stamina(),
+            if( query_int( value, false, _( "Set stamina to?  Current: %d. Max: %d." ), you.get_stamina(),
                            you.get_stamina_max() ) ) {
                 if( value >= 0 && value <= you.get_stamina_max() ) {
                     you.set_stamina( value );
@@ -2482,7 +2493,7 @@ static void character_edit_menu()
             break;
         case D_MORALE: {
             int value;
-            if( query_int( value, _( "Set the morale to?  Currently: %d" ), you.get_morale_level() ) ) {
+            if( query_int( value, false, _( "Set the morale to?  Currently: %d" ), you.get_morale_level() ) ) {
                 you.rem_morale( morale_perm_debug );
                 int morale_level_delta = value - you.get_morale_level();
                 you.add_morale( morale_perm_debug, morale_level_delta );
@@ -2492,7 +2503,7 @@ static void character_edit_menu()
         break;
         case D_KILL_XP: {
             int value;
-            if( query_int( value, _( "Set kill XP to?  Currently: %d" ), you.kill_xp ) ) {
+            if( query_int( value, false, _( "Set kill XP to?  Currently: %d" ), you.kill_xp ) ) {
                 you.kill_xp = value;
             }
         }
@@ -2508,7 +2519,7 @@ static void character_edit_menu()
             break;
         case D_PAIN: {
             int value;
-            if( query_int( value, _( "Cause how much pain?  pain: %d" ), you.get_pain() ) ) {
+            if( query_int( value, false, _( "Cause how much pain?  Current pain: %d" ), you.get_pain() ) ) {
                 you.mod_pain( value );
             }
         }
@@ -2573,17 +2584,19 @@ static void character_edit_menu()
             int value;
             switch( smenu.ret ) {
                 case 0:
-                    if( query_int( value, _( "Set the value to?  Currently: %d" ), you.get_lifestyle() ) ) {
+                    if( query_int( value, false, _( "Set lifestyle value to?  Currently: %d" ),
+                                   you.get_lifestyle() ) ) {
                         you.set_lifestyle( value );
                     }
                     break;
                 case 1:
-                    if( query_int( value, _( "Set the value to?  Currently: %d" ), you.get_daily_health() ) ) {
+                    if( query_int( value, false, _( "Set the daily health value to?  Currently: %d" ),
+                                   you.get_daily_health() ) ) {
                         you.set_daily_health( value );
                     }
                     break;
                 case 2:
-                    if( query_int( value, _( "Set the value to?  Currently: %d" ), you.get_rad() ) ) {
+                    if( query_int( value, false, _( "Set the radiation to?  Currently: %d" ), you.get_rad() ) ) {
                         you.set_rad( value );
                     }
                     break;
@@ -2734,17 +2747,17 @@ static void faction_edit_opinion_menu( faction *fac )
     int value;
     switch( smenu.ret ) {
         case 0:
-            if( query_int( value, _( "Change like from %d to: " ), fac->likes_u ) ) {
+            if( query_int( value, false, _( "Change like from %d to: " ), fac->likes_u ) ) {
                 fac->likes_u = value;
             }
             break;
         case 1:
-            if( query_int( value, _( "Change respect from %d to: " ), fac->respects_u ) ) {
+            if( query_int( value, false, _( "Change respect from %d to: " ), fac->respects_u ) ) {
                 fac->respects_u = value;
             }
             break;
         case 2:
-            if( query_int( value, _( "Change trust from %d to: " ), fac->trusts_u ) ) {
+            if( query_int( value, false, _( "Change trust from %d to: " ), fac->trusts_u ) ) {
                 fac->trusts_u = value;
             }
             break;
@@ -2753,30 +2766,55 @@ static void faction_edit_opinion_menu( faction *fac )
 
 static void faction_edit_larder_menu( faction *fac )
 {
-    uilist smenu;
-    smenu.addentry( 0, true, 'l', _( "kcal: have stored %i" ), fac->food_supply.kcal() );
-    const auto &vits = vitamin::all();
-    for( const auto &v : vits ) {
-        smenu.addentry( -1, true, 0, _( "%s: have stored %d" ), v.second.name(),
-                        fac->food_supply.get_vitamin( v.first ) );
+    std::vector<cata::list<std::pair<time_point, nutrients>>::iterator> supplies_by_expiry;
+    fac->prune_food_supply();
+    cata::list<std::pair<time_point, nutrients>> &food_supply = fac->debug_food_supply();
+    supplies_by_expiry.reserve( food_supply.size() );
+    for( auto it = food_supply.begin(); it != food_supply.end(); ++it ) {
+        supplies_by_expiry.push_back( it );
     }
 
-    smenu.query();
-    int value;
-    switch( smenu.ret ) {
-        case 0:
-            if( query_int( value, _( "Change food from %d to: " ), fac->food_supply.kcal() ) ) {
-                fac->food_supply.calories = ( value * 1000 );
-            }
+    uilist entry_query;
+    entry_query.ret = 0;
+    entry_query.title = _( "Edit which entry?" );
+    for( size_t i = 0; i < supplies_by_expiry.size(); ++i ) {
+        entry_query.addentry( i, true, 0, _( "%d kcal, expires %s" ), supplies_by_expiry[i]->second.kcal(),
+                              to_string( supplies_by_expiry[i]->first ) );
+    }
+
+    while( entry_query.ret != UILIST_CANCEL ) {
+        entry_query.query();
+
+        if( entry_query.ret < 0 || static_cast<size_t>( entry_query.ret ) >= supplies_by_expiry.size() ) {
             break;
-        default:
-            if( smenu.ret >= 1 && smenu.ret < static_cast<int>( vits.size() + 1 ) ) {
-                auto iter = std::next( vits.begin(), smenu.ret - 1 );
-                if( query_int( value, _( "Set %s to?  Currently: %d" ),
-                               iter->second.name(), fac->food_supply.get_vitamin( iter->first ) ) ) {
-                    fac->food_supply.set_vitamin( iter->first, value );
+        }
+        nutrients &entry = supplies_by_expiry[entry_query.ret]->second;
+
+        uilist smenu;
+        smenu.addentry( 0, true, 'l', _( "kcal: have stored %i" ), entry.kcal() );
+        const auto &vits = vitamin::all();
+        for( const auto &v : vits ) {
+            smenu.addentry( -1, true, 0, _( "%s: have stored %d" ), v.second.name(),
+                            entry.get_vitamin( v.first ) );
+        }
+
+        smenu.query();
+        int value;
+        switch( smenu.ret ) {
+            case 0:
+                if( query_int( value, false, _( "Change food from %d to: " ), entry.kcal() ) ) {
+                    entry.calories = ( value * 1000 );
                 }
-            }
+                break;
+            default:
+                if( smenu.ret >= 1 && smenu.ret < static_cast<int>( vits.size() + 1 ) ) {
+                    auto iter = std::next( vits.begin(), smenu.ret - 1 );
+                    if( query_int( value, false, _( "Set %s to?  Currently: %d" ),
+                                   iter->second.name(), entry.get_vitamin( iter->first ) ) ) {
+                        entry.set_vitamin( iter->first, value );
+                    }
+                }
+        }
     }
 }
 
@@ -2799,7 +2837,7 @@ static void faction_edit_menu()
          << string_format( _( "Currency: %s" ), fac->currency.obj().nname( fac->wealth ) ) << std::endl;
     data << string_format( _( "Size: %d" ), fac->size ) << " | "
          << string_format( _( "Power: %d" ), fac->power ) << " | "
-         << string_format( _( "Food Supply: %d" ), fac->food_supply.kcal() ) << std::endl;
+         << string_format( _( "Food Supply: %d" ), fac->food_supply().kcal() ) << std::endl;
     data << string_format( _( "Like: %d" ), fac->likes_u ) << " | "
          << string_format( _( "Respect: %d" ), fac->respects_u ) << " | "
          << string_format( _( "Trust: %d" ), fac->trusts_u ) << std::endl;
@@ -2823,17 +2861,17 @@ static void faction_edit_menu()
     int value;
     switch( nmenu.ret ) {
         case D_WEALTH:
-            if( query_int( value, _( "Change wealth from %d to: " ), fac->wealth ) ) {
+            if( query_int( value, false, _( "Change wealth from %d to: " ), fac->wealth ) ) {
                 fac->wealth = value;
             }
             break;
         case D_SIZE:
-            if( query_int( value, _( "Change size from %d to: " ), fac->size ) ) {
+            if( query_int( value, false, _( "Change size from %d to: " ), fac->size ) ) {
                 fac->size = value;
             }
             break;
         case D_POWER:
-            if( query_int( value, _( "Change power from %d to: " ), fac->power ) ) {
+            if( query_int( value, false, _( "Change power from %d to: " ), fac->power ) ) {
                 fac->power = value;
             }
             break;
@@ -3240,15 +3278,11 @@ static void debug_menu_force_temperature()
     if( tempmenu.ret == 0 ) {
         forced_temp.reset();
     } else {
-        string_input_popup pop;
-
-        auto ask = [&pop]( const std::string & unit, std::optional<float> current ) {
-            int ret = pop.title( string_format( _( "Set temperature to?  [%s]" ), unit ) )
-                      .width( 20 )
-                      .text( current ? std::to_string( static_cast<int>( std::round( *current ) ) ) : "" )
-                      .query_int();
-
-            return pop.canceled() ? current : std::optional<float>( static_cast<float>( ret ) );
+        auto ask = []( const std::string & unit, std::optional<float> current ) {
+            int ret = !!current ? static_cast<int>( std::round( *current ) ) :
+                      static_cast<int>( std::round( get_weather().temperature.value() ) );
+            return query_int( ret, !!current, _( "Set temperature to?  [%s]" ), unit ) ?
+                   std::optional<float>( static_cast<float>( ret ) ) : current;
         };
 
         std::optional<float> current;
@@ -3352,7 +3386,7 @@ static void bleed_self()
         default:
             break;
     }
-    if( query_int( intensity, _( "Add bleeding duration in minutes, equal to intensity:" ) ) ) {
+    if( query_int( intensity, false, _( "Add bleeding duration in minutes, equal to intensity:" ) ) ) {
         get_avatar().add_effect( effect_bleed,  1_minutes * intensity, part );
     }
 }
@@ -3457,12 +3491,8 @@ static void gen_sound()
         return;
     }
 
-    int volume;
-    if( !query_int( volume, _( "Volume of sound: " ) ) ) {
-        return;
-    }
-
-    if( volume < 0 ) {
+    int volume = 0;
+    if( !query_int( volume, false, _( "Volume of sound: " ) ) || volume < 0 ) {
         return;
     }
 
@@ -3555,6 +3585,7 @@ static void map_extra()
                                               _( "Select location to spawn map extra." ), true ) );
         if( !where_omt.is_invalid() ) {
             smallmap mx_map;
+            swap_map swap( *mx_map.cast_to_map() );
             mx_map.load( where_omt, false );
             MapExtras::apply_function( mx_str[mx_choice], mx_map, where_omt );
             g->load_npcs();
@@ -3928,7 +3959,7 @@ void debug()
 
         case debug_menu_index::SPAWN_OM_NPC: {
             int num_of_npcs = 1;
-            if( query_int( num_of_npcs, _( "How many NPCs to try spawning?" ), num_of_npcs ) ) {
+            if( query_int( num_of_npcs, false, _( "How many NPCs to try spawning?" ), num_of_npcs ) ) {
                 for( int i = 0; i < num_of_npcs; i++ ) {
                     g->perhaps_add_random_npc( true );
                 }
@@ -4150,12 +4181,10 @@ void debug()
             break;
 
         case debug_menu_index::BENCHMARK: {
-            const int ms = string_input_popup()
-                           .title( _( "Enter benchmark length (in milliseconds):" ) )
-                           .width( 20 )
-                           .text( "5000" )
-                           .query_int();
-            debug_menu::draw_benchmark( ms );
+            int ms = 5000;
+            if( query_int( ms, true, _( "Enter benchmark length (in milliseconds):" ) ) ) {
+                debug_menu::draw_benchmark( ms );
+            }
         }
         break;
 
