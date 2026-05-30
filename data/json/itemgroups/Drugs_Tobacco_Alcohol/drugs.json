@@ -698,6 +698,20 @@
   },
   {
     "type": "item_group",
+    "id": "vitamins_bottle_plastic_pill_supplement_1_10",
+    "subtype": "collection",
+    "container-item": "bottle_plastic_pill_supplement",
+    "entries": [ { "item": "vitamins", "container-item": "null", "count": [ 1, 10 ] } ]
+  },
+  {
+    "type": "item_group",
+    "id": "caffeine_bottle_plastic_pill_supplement_10",
+    "subtype": "collection",
+    "container-item": "bottle_plastic_pill_supplement",
+    "entries": [ { "item": "caffeine", "container-item": "null", "count": 10 } ]
+  },
+  {
+    "type": "item_group",
     "id": "caffeine_bottle_plastic_pill_supplement_1_10",
     "subtype": "collection",
     "container-item": "bottle_plastic_pill_supplement",
@@ -856,6 +870,13 @@
     "subtype": "collection",
     "container-item": "bottle_plastic_small",
     "entries": [ { "item": "protein_powder", "container-item": "null", "count": [ 1, 9 ] } ]
+  },
+  {
+    "type": "item_group",
+    "id": "protein_powder_bottle_plastic_small_9",
+    "subtype": "collection",
+    "container-item": "bottle_plastic_small",
+    "entries": [ { "item": "protein_powder", "container-item": "null", "count": 9 } ]
   },
   {
     "type": "item_group",
