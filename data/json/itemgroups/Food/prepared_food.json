@@ -43,6 +43,27 @@
   },
   {
     "type": "item_group",
+    "id": "currywurst_wrapper_2",
+    "subtype": "collection",
+    "container-item": "wrapper",
+    "entries": [ { "item": "currywurst", "container-item": "null", "count": 2 } ]
+  },
+  {
+    "type": "item_group",
+    "id": "bacon_bag_plastic_2",
+    "subtype": "collection",
+    "container-item": "bag_plastic_small",
+    "entries": [ { "item": "bacon", "container-item": "null", "count": 2 } ]
+  },
+  {
+    "type": "item_group",
+    "id": "bologna_bag_plastic_10",
+    "subtype": "collection",
+    "container-item": "bowl_plastic",
+    "entries": [ { "item": "bologna", "container-item": "null", "count": 10 } ]
+  },
+  {
+    "type": "item_group",
     "id": "crab_cakes_box_small_1_inf",
     "subtype": "collection",
     "container-item": "box_small",
@@ -118,23 +139,33 @@
   },
   {
     "type": "item_group",
-    "id": "soup_instant_chicken_noodle_powder_bag_paper_powder_1",
+    "id": "pemmican_bag_small",
     "subtype": "collection",
-    "container-item": "bag_paper_powder",
-    "entries": [ { "item": "soup_instant_chicken_noodle_powder", "container-item": "null", "count": [ 1, 1 ] } ]
+    "container-item": "bag_plastic_small",
+    "entries": [ { "item": "pemmican", "container-item": "null", "count": 4 } ]
   },
   {
     "type": "item_group",
-    "id": "soup_instant_vegetable_powder_bag_paper_powder_1",
-    "subtype": "collection",
+    "id": "soup_box",
+    "subtype": "distribution",
+    "container-item": "box_small",
+    "entries": [ { "group": "soup_packet", "count": [ 1, 8 ] } ]
+  },
+  {
+    "type": "item_group",
+    "id": "soup_packet",
+    "subtype": "distribution",
     "container-item": "bag_paper_powder",
-    "entries": [ { "item": "soup_instant_vegetable_powder", "container-item": "null", "count": [ 1, 1 ] } ]
+    "entries": [
+      { "item": "soup_instant_chicken_noodle_powder", "container-item": "null" },
+      { "item": "soup_instant_vegetable_powder", "container-item": "null" }
+    ]
   },
   {
     "type": "item_group",
     "id": "instant_gravy",
-    "subtype": "collection",
-    "entries": [ { "group": "instant_gravy_tub", "prob": 5 }, { "group": "instant_gravy_packets", "count": [ 1, 12 ], "prob": 60 } ]
+    "subtype": "distribution",
+    "entries": [ { "group": "instant_gravy_tub", "prob": 1 }, { "group": "instant_gravy_packets", "count": [ 1, 12 ], "prob": 8 } ]
   },
   {
     "type": "item_group",
@@ -143,14 +174,14 @@
     "//1": "Odd serving count as I really didn't feel like adding a specific gravy powder container",
     "subtype": "distribution",
     "container-item": "plastic_bucket",
-    "entries": [ { "item": "gravy_mix", "count": 850, "prob": 50 }, { "item": "vegan_gravy_mix", "count": 850, "prob": 50 } ]
+    "entries": [ { "item": "gravy_mix", "count": 850, "prob": 1 }, { "item": "vegan_gravy_mix", "count": 850, "prob": 7 } ]
   },
   {
     "type": "item_group",
     "id": "instant_gravy_packets",
     "subtype": "distribution",
     "container-item": "bag_paper_powder",
-    "entries": [ { "item": "gravy_mix", "count": 8, "prob": 90 }, { "item": "vegan_gravy_mix", "count": 8, "prob": 10 } ]
+    "entries": [ { "item": "gravy_mix", "count": 8, "prob": 1 }, { "item": "vegan_gravy_mix", "count": 8, "prob": 7 } ]
   },
   {
     "type": "item_group",
@@ -158,6 +189,13 @@
     "subtype": "collection",
     "container-item": "jar_glass_sealed",
     "entries": [ { "item": "peanutbutter", "container-item": "null", "count": -1 } ]
+  },
+  {
+    "id": "spread_peanutbutter_2",
+    "type": "item_group",
+    "subtype": "collection",
+    "container-item": "can_food",
+    "entries": [ { "item": "spread_peanutbutter", "container-item": "null", "count": 2 } ]
   },
   {
     "id": "chicken_fried_box_6",
