@@ -1036,6 +1036,10 @@ int spell::energy_cost( const Character &guy ) const
     } else {
         cost = type->base_energy_cost.evaluate( d );
     }
+    // Spells with no cost are not increased by encumbrance
+    if( cost == 0 ) {
+        return 0;
+    }
     if( !no_hands() && !guy.has_flag( json_flag_SUBTLE_SPELL ) ) {
         // the first 10 points of combined encumbrance is ignored, but quickly adds up
         const int hands_encumb = std::max( 0,
@@ -2860,6 +2864,7 @@ bool spell::casting_time_encumbered( const Character &guy ) const
 
 bool spell::energy_cost_encumbered( const Character &guy ) const
 {
+
     if( !no_hands() && !guy.has_flag( json_flag_SUBTLE_SPELL ) ) {
         return std::max( 0, guy.avg_encumb_of_limb_type( bp_type:: hand ) - 5 ) >
                0;
@@ -3052,10 +3057,11 @@ void spellcasting_callback::display_spell_info( size_t index )
     std::string range = sp.range( pc ) <= 0 ? _( "self" ) : std::to_string( sp.range( pc ) );
     ImGui::Text( "%s: %s", _( "Range" ), range.c_str() );
 
+    std::string aoe_string_temp = is_psi ? _( "Power Radius" ) : _( "Spell Radius" );
+
     // if it's any type of attack spell, the stats are normal.
     if( sp.effect() == "attack" ) {
         if( sp.aoe( pc ) > 0 ) {
-            std::string aoe_string_temp = _( "Spell Radius" );
             std::string degree_string;
             if( sp.shape() == spell_shape::cone ) {
                 aoe_string_temp = _( "Cone Arc" );
@@ -3071,12 +3077,12 @@ void spellcasting_callback::display_spell_info( size_t index )
         }
     } else if( sp.effect() == "summon" || sp.effect() == "fertilize_plant" ||
                sp.effect() == "effect_on_condition" ) {
-        ImGui::Text( "%s: %d", _( "Spell Radius" ), sp.aoe( pc ) );
+        ImGui::Text( "%s: %d", aoe_string_temp.c_str(), sp.aoe( pc ) );
     } else if( sp.effect() == "ter_transform" ) {
-        ImGui::Text( "%s: %s", _( "Spell Radius" ), sp.aoe_string( pc ).c_str() );
+        ImGui::Text( "%s: %s", aoe_string_temp.c_str(), sp.aoe_string( pc ).c_str() );
     } else if( sp.effect() == "banishment" ) {
         if( sp.aoe( pc ) > 0 ) {
-            ImGui::Text( _( "Spell Radius: %d" ), sp.aoe( pc ) );
+            ImGui::Text( _( "%s: %d" ), aoe_string_temp.c_str(), sp.aoe( pc ) );
         }
     }
 

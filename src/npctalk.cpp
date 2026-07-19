@@ -4695,7 +4695,7 @@ talk_effect_fun_t::func f_dimension_name( const JsonObject &jo, std::string_view
     std::string var_name = var.name;
 
     return [var_name, type]( dialogue & d ) {
-        write_var_value( type, var_name, &d, g->get_dimension_prefix() );
+        write_var_value( type, var_name, &d, g->get_dimension_prefix().str() );
     };
 }
 
@@ -5999,7 +5999,6 @@ talk_effect_fun_t::func f_die_advanced( const JsonObject &jo, std::string_view m
     JsonObject job = jo.get_object( member );
     std::optional<bool> remove_corpse;
     std::optional<bool> supress_message;
-    std::optional<bool> remove_from_creature_tracker;
 
     if( job.has_bool( "remove_corpse" ) ) {
         remove_corpse = job.get_bool( "remove_corpse" );
@@ -6007,20 +6006,12 @@ talk_effect_fun_t::func f_die_advanced( const JsonObject &jo, std::string_view m
     if( job.has_bool( "supress_message" ) ) {
         supress_message = job.get_bool( "supress_message" );
     }
-    if( job.has_bool( "remove_from_creature_tracker" ) ) {
-        remove_from_creature_tracker = job.get_bool( "remove_from_creature_tracker" );
-    }
 
-    return [remove_corpse, supress_message, remove_from_creature_tracker,
-                   is_npc]( dialogue const & d ) {
+    return [remove_corpse, supress_message, is_npc]( dialogue const & d ) {
         map &here = get_map();
 
         if( d.actor( is_npc )->get_monster() ) {
             monster &mon = *d.actor( is_npc )->get_monster();
-            if( remove_from_creature_tracker ) {
-                get_creature_tracker().remove( mon );
-                return;
-            }
             mon.death_drops = remove_corpse.has_value() ? !remove_corpse.value() : mon.death_drops;
             mon.quiet_death = supress_message.has_value() ? supress_message.value() : mon.quiet_death;
         } else if( d.actor( is_npc )->get_npc() ) {
@@ -8280,13 +8271,11 @@ talk_effect_fun_t::func f_travel_to_dimension( const JsonObject &jo, std::string
 
 
     return [fail_message, success_message, dimension_prefix, npc_travel_filter, target_location,
-                  npc_travel_radius, item_travel_radius, region_type_var, take_vehicle]( dialogue const & d ) {
+                  npc_travel_radius, item_travel_radius, take_vehicle]( dialogue const & d ) {
         Creature *teleporter = d.actor( false )->get_creature();
         if( teleporter ) {
-            std::string region_type = region_type_var.evaluate( d );
-            std::string prefix = dimension_prefix.evaluate( d );
-            std::string temp_dimension_prefix = ( prefix == "default" ) ? "" : prefix;
-            if( temp_dimension_prefix != g->get_dimension_prefix() ) {
+            dimension_id prefix( dimension_prefix.evaluate( d ) );
+            if( prefix != g->get_dimension_prefix() && prefix.is_valid() ) {
                 std::vector<npc *> travellers;
                 std::string filter = npc_travel_filter.evaluate( d );
                 int radius = npc_travel_radius.evaluate( d );
@@ -8335,7 +8324,7 @@ talk_effect_fun_t::func f_travel_to_dimension( const JsonObject &jo, std::string
                     veh = &vp_here->vehicle();
                 }
                 // returns False if fail
-                if( g->travel_to_dimension( prefix, region_type, travellers, items, center, veh ) ) {
+                if( g->travel_to_dimension( prefix, travellers, items, center, veh ) ) {
                     teleporter->add_msg_if_player( success_message.evaluate( d ) );
                 } else {
                     teleporter->add_msg_if_player( fail_message.evaluate( d ) );

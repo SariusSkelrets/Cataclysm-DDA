@@ -3750,6 +3750,24 @@ void iuse::play_music( Character *p, const tripoint_bub_ms &source, const int vo
     }
 }
 
+void iuse::make_music( Character *p, const tripoint_bub_ms &source, int volume, int max_morale,
+                       bool play_sounds )
+{
+    //I've mirrored playing music which is really more like listening to music.  Studies show that satisfaction from playing musical instruments outlasts emotional impact of listening to music.
+    if( play_sounds ) {
+        sounds::sound( source, volume, sounds::sound_t::music, _( "music" ), false, "music", "music" );
+    }
+    if( ! p || !p->can_hear( source, volume ) ) {
+        return;
+    }
+    p->add_effect( effect_music, 1_turns );
+    if( max_morale > 0 ) {
+        p->add_morale( morale_music, 1, max_morale, 2_hours, 30_minutes );
+    } else if( max_morale < 0 ) {
+        p->add_morale( morale_music, -1, max_morale, 2_hours, 30_minutes );
+    }
+}
+
 std::optional<int> iuse::mp3_on( Character *p, item *it, const tripoint_bub_ms &pos )
 {
     if( !it->activation_success() ) {
@@ -8717,7 +8735,7 @@ std::optional<int> iuse::wash_items( Character *p, bool soft_items, bool hard_it
                           );
     int available_cleanser = std::max( {
         crafting_inv.charges_of( itype_soap ),
-        crafting_inv.charges_of( itype_detergent ),
+        crafting_inv.amount_of( itype_detergent ),
         crafting_inv.charges_of( itype_liquid_soap, INT_MAX, is_liquid )
     } );
 
@@ -8785,7 +8803,7 @@ std::optional<int> iuse::wash_items( Character *p, bool soft_items, bool hard_it
                               required.water );
         return std::nullopt;
     } else if( !crafting_inv.has_charges( itype_soap, required.cleanser ) &&
-               !crafting_inv.has_charges( itype_detergent, required.cleanser ) &&
+               !crafting_inv.has_amount( itype_detergent, required.cleanser ) &&
                !crafting_inv.has_charges( itype_liquid_soap, required.cleanser, is_liquid ) ) {
         p->add_msg_if_player( _( "You need %1$i charges of cleansing agent to wash these items." ),
                               required.cleanser );
