@@ -896,12 +896,18 @@
     "type": "mutation",
     "id": "NO_NIGHTVISION",
     "name": { "str": "Night Blindness" },
-    "description": "Ever since the skies broke you lost all ability to see in the dark, being fully blind unless you're standing in light.  Now that the world is filled with monsters ready to attack everyone they see, using a light in the night may not be the best idea.",
-    "//": "Making it an effect allows to modify all night sight no matter the sight-parts the player has.",
-    "types": [ "VISION" ],
-    "points": -4,
+    "description": "Ever since the skies broke you lost all ability to see in the dark, being fully blind unless you're standing in light even when using night vision googles.  Now that the world is filled with monsters ready to attack everyone they see, using a light in the night may not be the best idea.",
+    "//": "It is meant to block all ability to see in the dark even through supernatural/bionic night vision, as it is your brain losing the ability to register seen things unless there's enough ambient light and not an eye problem.",
+    "points": -6,
     "starting_trait": true,
-    "ench_effects": [ { "effect": "night_blind", "intensity": 1 } ],
+    "valid": false,
+    "purifiable": false,
+    "enchantments": [
+      {
+        "condition": { "and": [ { "math": [ "light_level(_pos) == 0" ] }, { "not": { "u_has_effect": "haslight" } } ] },
+        "ench_effects": [ { "effect": "night_blind", "intensity": 1 } ]
+      }
+    ],
     "cancels": [ "NIGHTVISION", "NIGHTVISION2", "NIGHTVISION3", "ELFA_NV", "ELFA_FNV", "FEL_NV", "CEPH_VISION" ]
   },
   {

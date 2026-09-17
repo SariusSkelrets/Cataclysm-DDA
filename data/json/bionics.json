@@ -617,8 +617,7 @@
       "LIZ_EYE",
       "EYEBULGE",
       "SEESLEEP",
-      "INTERSTICEEYES",
-      "NO_NIGHTVISION"
+      "INTERSTICEEYES"
     ],
     "mutation_conflicts": [ "EYESTALKS1", "EYESTALKS2" ]
   },

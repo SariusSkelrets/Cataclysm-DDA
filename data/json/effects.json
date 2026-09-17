@@ -1017,17 +1017,19 @@
   {
     "type": "effect_type",
     "id": "night_blind",
-    "name": [ { "str": "Blind in the Dark", "//~": "NO_I18N" } ],
-    "desc": [
-      {
-        "str": "You cannot see anything in the dark.  You shouldn't be able to see this description either!",
-        "//~": "NO_I18N"
-      }
-    ],
+    "name": [ "Blind" ],
+    "desc": [ "Range of Sight: 0.  You cannot see anything due to the dark." ],
+    "removes_effects": [ "glare", "snow_glare", "darkness" ],
+    "apply_message": "It's too dark to see anything!",
+    "remove_message": "You can see again!",
     "rating": "bad",
-    "show_in_info": false,
-    "limb_score_mods": [ { "limb_score": "night_vis", "modifier": 0.0 } ],
-    "flags": [ "EFFECT_LIMB_SCORE_MOD" ]
+    "show_in_info": true,
+    "limb_score_mods": [
+      { "limb_score": "vision", "modifier": 0.0 },
+      { "limb_score": "night_vis", "modifier": 0.0 },
+      { "limb_score": "reaction", "modifier": 0.2 }
+    ],
+    "flags": [ "EFFECT_LIMB_SCORE_MOD", "BLIND" ]
   },
   {
     "type": "effect_type",
@@ -4584,6 +4586,7 @@
     "name": [ "Lit Up" ],
     "desc": [ "You are carrying a light and can't hide well." ],
     "max_duration": "1 s",
+    "removes_effects": [ "night_blind" ],
     "rating": "bad"
   },
   {
