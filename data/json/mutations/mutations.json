@@ -894,6 +894,18 @@
   },
   {
     "type": "mutation",
+    "id": "NO_NIGHTVISION",
+    "name": { "str": "Night Blindness" },
+    "description": "Ever since the skies broke you lost all ability to see in the dark, being fully blind unless you're standing in light.  Now that the world is filled with monsters ready to attack everyone they see, using a light in the night may not be the best idea.",
+    "//": "Making it an effect allows to modify all night sight no matter the sight-parts the player has.",
+    "types": [ "VISION" ],
+    "points": -4,
+    "starting_trait": true,
+    "ench_effects": [ { "effect": "night_blind", "intensity": 1 } ],
+    "cancels": [ "NIGHTVISION", "NIGHTVISION2", "NIGHTVISION3", "ELFA_NV", "ELFA_FNV", "FEL_NV", "CEPH_VISION" ]
+  },
+  {
+    "type": "mutation",
     "id": "MYOPIC",
     "name": { "str": "Near-Sighted" },
     "description": "Without glasses, your seeing radius is severely reduced!  However, you are guaranteed to start with a pair of glasses.",
