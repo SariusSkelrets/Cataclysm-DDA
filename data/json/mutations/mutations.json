@@ -902,12 +902,6 @@
     "starting_trait": true,
     "valid": false,
     "purifiable": false,
-    "enchantments": [
-      {
-        "condition": { "and": [ { "math": [ "light_level(_pos) == 0" ] }, { "not": { "u_has_effect": "haslight" } } ] },
-        "ench_effects": [ { "effect": "night_blind", "intensity": 1 } ]
-      }
-    ],
     "cancels": [ "NIGHTVISION", "NIGHTVISION2", "NIGHTVISION3", "ELFA_NV", "ELFA_FNV", "FEL_NV", "CEPH_VISION" ]
   },
   {

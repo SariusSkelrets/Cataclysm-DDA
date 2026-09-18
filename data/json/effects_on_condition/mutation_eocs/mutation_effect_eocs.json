@@ -842,5 +842,21 @@
       ]
     },
     "effect": [ { "u_lose_effect": "asocial_dissatisfied" }, { "u_lose_effect": "social_dissatisfied" } ]
+  },
+  {
+    "type": "effect_on_condition",
+    "id": "EOC_NO_NIGHTVISION_CHECK",
+    "recurrence": [ "1 s", "1 s" ],
+    "condition": { "u_has_trait": "NO_NIGHTVISION" },
+    "deactivate_condition": { "not": { "u_has_trait": "NO_NIGHTVISION" } },
+    "//": "When it will be possible to directly check the light level of where the player is without needing a EOC, the trait will no longer need this constant EOC and will work with a simple enchantment.",
+    "effect": [
+      { "u_location_variable": { "context_val": "light_check_pos" } },
+      {
+        "if": { "math": [ "light_level(_light_check_pos) <= 5" ] },
+        "then": [ { "u_add_effect": "night_blind", "duration": "10 seconds" } ],
+        "else": [ { "u_lose_effect": "night_blind" } ]
+      }
+    ]
   }
 ]

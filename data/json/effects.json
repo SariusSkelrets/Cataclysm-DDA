@@ -4586,7 +4586,6 @@
     "name": [ "Lit Up" ],
     "desc": [ "You are carrying a light and can't hide well." ],
     "max_duration": "1 s",
-    "removes_effects": [ "night_blind" ],
     "rating": "bad"
   },
   {
