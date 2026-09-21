@@ -118,5 +118,24 @@
         { "item": "money_five", "count": [ 0, 299 ] }
       ]
     }
+  },
+  {
+    "type": "furniture",
+    "id": "",
+    "name": "",
+    "symbol": "#",
+    "description": ".",
+    "color": "dark_gray",
+    "required_str": -1,
+    "examine_action": { "type": "effect_on_condition", "effect_on_conditions": [ "" ] }
+  },
+  {
+    "type": "furniture",
+    "id": "_inert",
+    "name": "",
+    "symbol": "#",
+    "description": ".",
+    "color": "dark_gray",
+    "required_str": -1
   }
 ]
